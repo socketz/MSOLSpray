@@ -171,7 +171,7 @@ function Invoke-MSOLSpray{
                 # Standard invalid password
             If($RespErr -match "AADSTS50126")
                 {
-                Write-Output "[*] INFO: Invalid password for $username."
+                # Silently continue for invalid passwords to avoid verbose output
                 continue
                 }
 
