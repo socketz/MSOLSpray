@@ -87,7 +87,6 @@ function Invoke-MSOLSpray{
     [string]
     $URL = "https://login.microsoft.com",
 
-    # Specify a target tenant ID (used to force authentication attempts against a specific tenant for B2B users)
     [Parameter(Position = 4, Mandatory = $False)]
     [string]
     $TenantId = "common",
@@ -171,7 +170,6 @@ function Invoke-MSOLSpray{
                 # Standard invalid password
             If($RespErr -match "AADSTS50126")
                 {
-                # Silently continue for invalid passwords to avoid verbose output
                 continue
                 }
 
