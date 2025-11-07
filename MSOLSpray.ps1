@@ -97,8 +97,31 @@ function Invoke-MSOLSpray{
   )
     
     $ErrorActionPreference= 'silentlycontinue'
+    
+    # Input validation
+    if ([string]::IsNullOrWhiteSpace($UserList)) {
+        Write-Host -ForegroundColor "red" "[!] Error: UserList parameter is required."
+        return
+    }
+    
+    if (-not (Test-Path $UserList)) {
+        Write-Host -ForegroundColor "red" "[!] Error: UserList file not found: $UserList"
+        return
+    }
+    
+    if ([string]::IsNullOrWhiteSpace($Password)) {
+        Write-Host -ForegroundColor "red" "[!] Error: Password parameter is required."
+        return
+    }
+    
     $Usernames = Get-Content $UserList
     $count = $Usernames.count
+    
+    if ($count -eq 0) {
+        Write-Host -ForegroundColor "red" "[!] Error: UserList file is empty."
+        return
+    }
+    
     $curr_user = 0
     $lockout_count = 0
     $lockoutquestion = 0
