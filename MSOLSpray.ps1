@@ -38,7 +38,7 @@ function Invoke-MSOLSpray{
         
         Delay in seconds between each authentication attempt. Helps avoid rate limiting and Smart Lockout. Default is 0 seconds.
     
-    .PARAMETER Verbose
+    .PARAMETER VerboseErrors
         
         Displays additional error information for troubleshooting authentication issues.
     
