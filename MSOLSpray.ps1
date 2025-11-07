@@ -267,13 +267,13 @@ function Invoke-MSOLSpray{
                 {
                 Write-Output "[*] Got an error we haven't seen yet for user $username"
                 if ($VerboseErrors) {
-                    Write-Output "[*] Verbose Error Details:"
+                    Write-Output "[*] Verbose Error Details for ${username}:"
                     $RespErr
                 }
                 }
         }
     
-        # Add delay between requests if specified
+        # Add delay between requests if specified (but not after the last user)
         if ($Delay -gt 0 -and $curr_user -lt $count) {
             Start-Sleep -Seconds $Delay
         }
