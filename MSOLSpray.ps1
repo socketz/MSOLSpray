@@ -199,7 +199,7 @@ function Invoke-MSOLSpray{
                 $fullresults += "$username : $password"
                 }
     
-                # Conditional Access response (Based off of limited testing this seems to be the repsonse to DUO MFA)
+                # Conditional Access response (Based off of limited testing this seems to be the response to DUO MFA)
             ElseIf($RespErr -match "AADSTS50158")
                 {
                 Write-Host -ForegroundColor "green" "[*] SUCCESS! $username : $password - NOTE: The response indicates conditional access (MFA: DUO or other) is in use."
